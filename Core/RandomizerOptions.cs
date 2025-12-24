@@ -2,6 +2,7 @@
 using OriBFArchipelago.MapTracker.Core;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace OriBFArchipelago.Core
 {
@@ -105,10 +106,36 @@ namespace OriBFArchipelago.Core
                     DeathLinkLogic = DeathLinkOptions.Disabled;
                 }
             }
-            catch(System.Exception ex)
+            catch (System.Exception ex)
             {
                 ModLogger.Error($"{ex}");
             }
+        }
+
+        public Dictionary<string, string> GetAllOptions()
+        {
+            return new Dictionary<string, string>
+            {
+                { "Goal", Goal.ToString() ?? string.Empty },
+                { "WarmthFragmentsAvailable", WarmthFragmentsAvailable.ToString() },
+                { "WarmthFragmentsRequired", WarmthFragmentsRequired.ToString() },
+                { "RelicCount", RelicCount.ToString() },
+                { "WorldTourAreas", WorldTourAreas != null ? string.Join(",", WorldTourAreas.Select(a => a.ToString()).ToArray()) : string.Empty },
+                { "LogicDifficulty", LogicDifficulty.ToString() ?? string.Empty },
+                { "KeyStoneLogic", KeyStoneLogic.ToString() ?? string.Empty },
+                { "MapStoneLogic", MapStoneLogic.ToString() ?? string.Empty },
+                { "DeathLinkLogic", DeathLinkLogic.ToString() ?? string.Empty },
+                { "EnableDamageBoost", EnableDamageBoost.ToString() },
+                { "EnableLure", EnableLure.ToString() },
+                { "EnableDoubleBash", EnableDoubleBash.ToString() },
+                { "EnableGrenadeJump", EnableGrenadeJump.ToString() },
+                { "EnableChargeFlame", EnableChargeFlame.ToString() },
+                { "EnableChargeDash", EnableChargeDash.ToString() },
+                { "EnableAirDash", EnableAirDash.ToString() },
+                { "EnableTripleJump", EnableTripleJump.ToString() },
+                { "EnableRekindle", EnableRekindle.ToString() },
+                { "GoalLocations", GoalLocations != null ? string.Join(",", GoalLocations) : string.Empty }
+            };
         }
     }
 }

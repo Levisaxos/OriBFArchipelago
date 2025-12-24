@@ -151,6 +151,7 @@ namespace OriBFArchipelago.Core
             Connected = result.Successful;
             return Connected;
         }
+        
 
         /**
          * Called every frame
@@ -657,6 +658,13 @@ namespace OriBFArchipelago.Core
 
                 }
             });
+        }
+
+
+
+        internal string GetSlotName()
+        {
+            return slotName;
         }
     }
 }

@@ -11,9 +11,26 @@ namespace OriBFArchipelago.Patches
     {
         private static RandomizerMessageBox _confirmationBox = null;
 
+        [HarmonyPrefix]
+        static bool FixedUpdate_Prefix(CleverMenuItemSelectionManager __instance)
+        {
+            // Check if FeedbackWindow is active - if so, consume input and skip original method
+            if (ArchipelagoUI.Feedback.FeedbackWindow.IsActive)
+            {
+                if (CoreInput.Cancel.OnPressed)
+                {
+                    CoreInput.Cancel.Used = true;
+                }
+                return false; // Skip original FixedUpdate
+            }
+
+            return true; // Run original FixedUpdate
+        }
+
         [HarmonyPostfix]
         static void FixedUpdate_Postfix(CleverMenuItemSelectionManager __instance)
         {
+
             if (_confirmationBox != null && _confirmationBox.IsActive && !__instance.IsVisible)
             {
                 CancelTeleport(__instance);

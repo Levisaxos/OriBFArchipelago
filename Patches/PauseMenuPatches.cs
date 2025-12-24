@@ -28,6 +28,12 @@ namespace OriBFArchipelago.Patches
     {
         static bool Prefix()
         {
+            // Don't hide menu if feedback window is active
+            if (ArchipelagoUI.Feedback.FeedbackWindow.IsActive)
+            {
+                return false; // Prevent hiding the menu
+            }
+
             RandomizerSettings.ShowSettings = false;
             return true;
         }

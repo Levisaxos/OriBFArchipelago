@@ -11,12 +11,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <PreBuildEvent Condition="'$(ComputerName)' == 'DESKTOP-BBR42JK'">
+    <PreBuildEvent Condition="'$(ComputerName)' == 'PSNB29'">
       cmd /c "taskkill /F /IM oriDE.exe /T 2&gt;nul || exit /b 0"
     </PreBuildEvent>
-    <PostBuildEvent Condition="'$(ComputerName)' == 'DESKTOP-BBR42JK'">
-      xcopy "$(TargetDir)OriBFArchipelago.dll" "E:\SteamLibrary\steamapps\common\Ori DE\BepInEx\plugins\OriBFArchipelago\" /Y
-      start "" "E:\SteamLibrary\steamapps\common\Ori DE\oriDE.exe"
+    <PostBuildEvent Condition="'$(ComputerName)' == 'PSNB29'">
+      xcopy "$(TargetDir)OriBFArchipelago.dll" "C:\Program Files (x86)\Steam\steamapps\common\Ori DE\BepInEx\plugins\OriBFArchipelago\" /Y
+      start "" "C:\Program Files (x86)\Steam\steamapps\common\Ori DE\oriDE.exe"
     </PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
