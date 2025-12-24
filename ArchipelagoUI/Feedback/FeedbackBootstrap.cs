@@ -101,7 +101,6 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
                 bool alreadyExists = currentMenu.MenuItems.Any(m => m.name == "MOD FEEDBACK");
                 if (!alreadyExists)
                 {
-                    ModLogger.Debug($"Found inventoryScreen menu, adding feedback button");
                     AddFeedbackMenuItem(currentMenu);
                     lastMenu = currentMenu;
                 }
@@ -118,15 +117,6 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
         {
             try
             {
-                ModLogger.Debug($"Menu has {component.MenuItems.Count} items before adding");
-
-                // Log all menu item names
-                for (int i = 0; i < component.MenuItems.Count; i++)
-                {
-                    var item = component.MenuItems[i];
-                    ModLogger.Debug($"  [{i}] {item.name}");
-                }
-
                 // Find the "exit" item index to insert before it
                 int exitIndex = -1;
                 for (int i = 0; i < component.MenuItems.Count; i++)
@@ -139,10 +129,13 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
                 }
 
                 int insertIndex = exitIndex >= 0 ? exitIndex : component.MenuItems.Count - 1;
-                ModLogger.Debug($"Inserting MOD FEEDBACK at index {insertIndex} (before exit at {exitIndex})");
 
-                // Clone options button as template
-                CleverMenuItem templateItem = component.MenuItems.FirstOrDefault(m => m.name == "options");
+                // Clone continue/exit button as template (use exit since it's a simple text button)
+                CleverMenuItem templateItem = component.MenuItems.FirstOrDefault(m => m.name == "exit");
+                if (templateItem == null)
+                {
+                    templateItem = component.MenuItems.FirstOrDefault(m => m.name == "continue");
+                }
                 if (templateItem == null)
                 {
                     templateItem = component.MenuItems[0];
@@ -157,23 +150,32 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (pressedCallbackField != null)
                 {
-                    ModLogger.Debug($"Found PressedCallback field (Public={pressedCallbackField.IsPublic}), clearing it");
                     pressedCallbackField.SetValue(menuItem, null);
                 }
                 else
                 {
-                    ModLogger.Debug($"Could not find PressedCallback field, trying event backing field");
                     var eventBackingField = typeof(CleverMenuItem).GetField("<PressedCallback>k__BackingField",
                         System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                     if (eventBackingField != null)
                     {
-                        ModLogger.Debug($"Found event backing field, clearing it");
                         eventBackingField.SetValue(menuItem, null);
                     }
-                    else
-                    {
-                        ModLogger.Debug($"Could not find any PressedCallback field to clear");
-                    }
+                }
+
+                // Clear the Activated condition so IsActivated returns true (based on activeInHierarchy only)
+                var activatedField = typeof(CleverMenuItem).GetField("Activated",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (activatedField != null)
+                {
+                    activatedField.SetValue(menuItem, null);
+                }
+
+                // Also clear the Visible condition field if it exists
+                var visibleField = typeof(CleverMenuItem).GetField("Visible",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (visibleField != null)
+                {
+                    visibleField.SetValue(menuItem, null);
                 }
 
                 // Store reference to this for coroutine
@@ -188,6 +190,40 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
 
                 menuItem.PressedCallback += feedbackAction;
 
+                // Clear OnHighlight callback
+                var onHighlightField = typeof(CleverMenuItem).GetField("OnHighlightCallback",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (onHighlightField == null)
+                {
+                    onHighlightField = typeof(CleverMenuItem).GetField("<OnHighlightCallback>k__BackingField",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                }
+                if (onHighlightField != null)
+                {
+                    onHighlightField.SetValue(menuItem, null);
+                }
+
+                // Clear OnUnhighlight callback
+                var onUnhighlightField = typeof(CleverMenuItem).GetField("OnUnhighlightCallback",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (onUnhighlightField == null)
+                {
+                    onUnhighlightField = typeof(CleverMenuItem).GetField("<OnUnhighlightCallback>k__BackingField",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                }
+                if (onUnhighlightField != null)
+                {
+                    onUnhighlightField.SetValue(menuItem, null);
+                }
+
+                // Clear Action field if it exists
+                var actionField = typeof(CleverMenuItem).GetField("Action",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (actionField != null)
+                {
+                    actionField.SetValue(menuItem, null);
+                }
+
                 // Set the text
                 MessageBox messageBox = menuItem.gameObject.GetComponentInChildren<MessageBox>();
                 if (messageBox != null)
@@ -197,35 +233,61 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
 
                 menuItem.ApplyColors();
 
+                // Ensure the GameObject is active (IsActivated will return true since Activated field is null)
+                menuItem.gameObject.SetActive(true);
+
                 // Insert into the menu
                 component.MenuItems.Insert(insertIndex, menuItem);
 
-                // Mark that we've added the item to this menu
-                menuItemAdded[component] = true;
-
-                ModLogger.Debug($"Menu has {component.MenuItems.Count} items after adding");
-
-                // Verify the item was added
-                bool found = false;
-                for (int i = 0; i < component.MenuItems.Count; i++)
+                // Add navigation connections if using NavigationCage mode
+                if (component.ItemDirection == CleverMenuItemSelectionManager.Direction.NavigationCage)
                 {
-                    var item = component.MenuItems[i];
-                    ModLogger.Debug($"  After: [{i}] {item.name}");
-                    if (item.name == "MOD FEEDBACK")
+                    // Find the exit menu item
+                    CleverMenuItem exitItem = component.MenuItems.FirstOrDefault(m => m.name == "exit");
+
+                    if (exitItem != null)
                     {
-                        found = true;
-                        ModLogger.Debug($"  ^^^ Found MOD FEEDBACK at index {i}!");
+                        // Find items that navigate TO exit (going down)
+                        var navigationsToExit = component.Navigation.Where(n => n.To == exitItem).ToList();
+
+                        foreach (var nav in navigationsToExit)
+                        {
+                            // Change their target from exit to MOD FEEDBACK
+                            nav.To = menuItem;
+                        }
+
+                        // Find items that navigate FROM exit (going back up)
+                        var navigationsFromExit = component.Navigation.Where(n => n.From == exitItem).ToList();
+
+                        foreach (var nav in navigationsFromExit)
+                        {
+                            // Change their source from exit to MOD FEEDBACK
+                            nav.From = menuItem;
+                        }
+
+                        // Add navigation from MOD FEEDBACK to exit (going down)
+                        component.Navigation.Add(new CleverMenuItemSelectionManager.NavigationData
+                        {
+                            From = menuItem,
+                            To = exitItem,
+                            Condition = null
+                        });
+
+                        // Add navigation from exit back to MOD FEEDBACK (going up)
+                        component.Navigation.Add(new CleverMenuItemSelectionManager.NavigationData
+                        {
+                            From = exitItem,
+                            To = menuItem,
+                            Condition = null
+                        });
                     }
                 }
 
-                if (found)
-                {
-                    ModLogger.Debug("Successfully added MOD FEEDBACK menu item");
-                }
-                else
-                {
-                    ModLogger.Error("MOD FEEDBACK was not found in menu after adding!");
-                }
+                // Refresh the menu visibility state to ensure our item is properly integrated
+                component.RefreshVisible();
+
+                // Mark that we've added the item to this menu
+                menuItemAdded[component] = true;
             }
             catch (Exception ex)
             {
@@ -241,6 +303,11 @@ namespace OriBFArchipelago.ArchipelagoUI.Feedback
             CleverMenuItem difficultyItem = component.MenuItems.FirstOrDefault(m => m.name == "difficulty");
             CleverMenuItem feedbackItem = component.MenuItems.FirstOrDefault(m => m.name == "MOD FEEDBACK");
             CleverMenuItem exitItem = component.MenuItems.FirstOrDefault(m => m.name == "exit");
+
+            if (feedbackItem != null && !feedbackItem.IsVisible)
+            {
+                feedbackItem.gameObject.SetActive(true);
+            }
 
             if (difficultyItem != null && exitItem != null && continueItem != null && optionsItem != null && feedbackItem != null)
             {
