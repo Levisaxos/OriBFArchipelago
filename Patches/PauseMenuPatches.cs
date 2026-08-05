@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using OriBFArchipelago.ArchipelagoUI;
 using OriBFArchipelago.Core;
 using OriBFArchipelago.MapTracker.Core;
 
@@ -14,6 +15,7 @@ namespace OriBFArchipelago.Patches
                 RandomizerSettings.ShowSettings = true;
                 RuntimeGameWorldAreaPatch.ToggleDiscoveredAreas(MaptrackerSettings.MapVisibility);
                 MaptrackerSettings.ResetCheckCount();
+                IconHoverUI.InvalidateCache();
             }
             catch
             {

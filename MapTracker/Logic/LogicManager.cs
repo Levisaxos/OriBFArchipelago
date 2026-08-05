@@ -42,6 +42,26 @@ namespace OriBFArchipelago.MapTracker.Logic
             }
         }
 
+        internal static bool IsUncollected(RuntimeWorldMapIcon icon)
+        {
+            try
+            {
+                if (IsIgnoredIconType(icon.Icon))
+                    return !MaptrackerSettings.HideNonCollectableIcons;
+
+                var trackerItem = LocationLookup.Get(icon.Guid);
+                if (trackerItem == null)
+                    return false;
+
+                return !RandomizerManager.Receiver.IsLocationChecked(trackerItem.Name, MaptrackerSettings.IconVisibilityLogic == IconVisibilityLogicEnum.Game, trackerItem.IsGoalRequiredItem());
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error($"Error at IsUncollected: {ex}");
+                return false;
+            }
+        }
+
         private static bool IsIgnoredIconType(WorldMapIconType iconType)
         {
 
