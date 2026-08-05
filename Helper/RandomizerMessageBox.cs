@@ -35,6 +35,43 @@ namespace OriBFArchipelago.Helper
             Show(_message, _onConfirm, _onCancel, _position, _confirmText, _cancelText);
         }
 
+        /**
+         * Shows the native popup as a non-dismissable info box: just the message, no button
+         * prompts, and confirm/cancel are swallowed so it stays up until Destroy() is called.
+         * Used for the "connecting" overlay.
+         */
+        public void ShowInfo()
+        {
+            Destroy();
+
+            ConfirmOrCancel prefab = FindPopupPrefab();
+            if (prefab == null)
+                return;
+
+            _popupComponent = UnityEngine.Object.Instantiate(prefab);
+
+            if (_position.HasValue)
+                _popupComponent.transform.position = _position.Value;
+
+            UpdatePromptText(_popupComponent.gameObject, _message);
+
+            // Swallow confirm/cancel so the player can't close it while connecting
+            _popupComponent.OnConfirm += () => { };
+            _popupComponent.OnCancel = () => { };
+
+            _popupComponent.enabled = true;
+        }
+
+        /**
+         * Updates the message text of an already shown popup.
+         */
+        public void SetMessage(string message)
+        {
+            _message = message;
+            if (_popupComponent != null)
+                UpdatePromptText(_popupComponent.gameObject, message);
+        }
+
         private void Show(string message, Action onConfirm = null, Action onCancel = null, Vector3? position = null, string confirmText = null, string cancelText = null)
         {
             Destroy();
