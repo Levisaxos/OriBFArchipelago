@@ -1,8 +1,8 @@
 using HarmonyLib;
 using OriBFArchipelago.MapTracker.Core;
+using SmartInput;
 using System.Collections.Generic;
 using UnityEngine;
-using CoreInput = Core.Input;
 
 namespace OriBFArchipelago.ArchipelagoUI
 {
@@ -16,17 +16,8 @@ namespace OriBFArchipelago.ArchipelagoUI
         /// <summary>Whether the panel is currently shown. Persisted between map opens.</summary>
         public bool Visible;
 
-        /// <summary>Short label shown on the legend hint button.</summary>
-        public abstract string HintLabel { get; }
-
-        /// <summary>Controller glyph markup shown when a gamepad is in use.</summary>
-        public abstract string ControllerIcon { get; }
-
-        /// <summary>Keyboard key that toggles the panel.</summary>
+        /// <summary>Keyboard key that toggles this panel individually.</summary>
         public abstract KeyCode ToggleKey { get; }
-
-        /// <summary>Controller button that toggles the panel.</summary>
-        public abstract CoreInput.InputButtonProcessor ToggleButton { get; }
 
         /// <summary>Anchor the panel to the bottom-right (else top-right) of the screen.</summary>
         public abstract bool AnchorBottomRight { get; }
@@ -54,6 +45,8 @@ namespace OriBFArchipelago.ArchipelagoUI
             {
                 if (__instance.GetComponent<MapPanelController>() == null)
                     __instance.gameObject.AddComponent<MapPanelController>();
+                if (__instance.GetComponent<MapCheckNavigator>() == null)
+                    __instance.gameObject.AddComponent<MapCheckNavigator>();
             }
         }
 
@@ -70,6 +63,11 @@ namespace OriBFArchipelago.ArchipelagoUI
         // Static so panel visibility survives the map being closed/reopened.
         private static readonly MapPanel[] Panels = { new GoalProgressPanel(), new ApSettingsPanel() };
 
+        // A single free controller button shows/hides both info panels together.
+        // (The D-pad isn't exposed as a distinct button, and the bumpers now flip
+        // through checks - see MapCheckNavigator.)
+        private const XboxControllerInput.Button PanelsToggleButton = XboxControllerInput.Button.ButtonX;
+
         private GameMapUI gameMapUI;
         private Transform legendRoot;
         private GameObject[] panelHints;
@@ -82,6 +80,10 @@ namespace OriBFArchipelago.ArchipelagoUI
         private readonly List<Transform> heldItems = new List<Transform>();
         private readonly List<float> heldX = new List<float>();
         private readonly List<Vector3> heldScale = new List<Vector3>();
+
+        // Previous-frame held state of the shared panels toggle button, for edge detection
+        // (ControllerButtonInput.GetButton reports held-state, not a one-shot press).
+        private bool panelsButtonHeldLast;
 
         private GUIStyle panelStyle;
         private Texture2D backgroundTexture;
@@ -130,11 +132,7 @@ namespace OriBFArchipelago.ArchipelagoUI
                     SetHold(heldItems[i], heldX[i], heldScale[i]);
             }
 
-            foreach (MapPanel panel in Panels)
-            {
-                if (Toggled(panel.ToggleKey, panel.ToggleButton))
-                    panel.Visible = !panel.Visible;
-            }
+            HandleToggleInput();
 
             bool keyboard = PlayerInput.Instance != null && PlayerInput.Instance.WasKeyboardUsedLast;
             if (hintsCreated && keyboard != wasKeyboardUsedLast)
@@ -144,18 +142,32 @@ namespace OriBFArchipelago.ArchipelagoUI
             }
         }
 
-        private static bool Toggled(KeyCode key, CoreInput.InputButtonProcessor button)
+        /// <summary>
+        /// Keyboard keys (F5/F6) toggle each panel individually; the shared controller
+        /// button (X) shows or hides both panels together.
+        /// </summary>
+        private void HandleToggleInput()
         {
-            if (UnityEngine.Input.GetKeyDown(key))
-                return true;
-
-            if (button.OnPressed && !button.Used)
+            // Keyboard: per-panel individual toggle.
+            foreach (MapPanel panel in Panels)
             {
-                button.Used = true;
-                return true;
+                if (UnityEngine.Input.GetKeyDown(panel.ToggleKey))
+                    panel.Visible = !panel.Visible;
             }
 
-            return false;
+            // Controller: one button toggles both panels together (edge-detected).
+            bool now = new ControllerButtonInput(PanelsToggleButton).GetButton();
+            if (now && !panelsButtonHeldLast)
+            {
+                bool anyVisible = false;
+                foreach (MapPanel panel in Panels)
+                    anyVisible |= panel.Visible;
+
+                bool show = !anyVisible;
+                foreach (MapPanel panel in Panels)
+                    panel.Visible = show;
+            }
+            panelsButtonHeldLast = now;
         }
 
         private void CreateHints()
@@ -297,15 +309,18 @@ namespace OriBFArchipelago.ArchipelagoUI
 
         private void UpdateHintText()
         {
-            if (panelHints == null)
+            if (panelHints == null || panelHints.Length < 2)
                 return;
 
             bool keyboard = PlayerInput.Instance != null && PlayerInput.Instance.WasKeyboardUsedLast;
-            for (int i = 0; i < Panels.Length; i++)
-            {
-                string icon = keyboard ? Panels[i].ToggleKey.ToString() : Panels[i].ControllerIcon;
-                SetHintText(panelHints[i], icon, Panels[i].HintLabel);
-            }
+
+            // Hint 0: flip through in-logic checks with the bumpers (controller-only feature).
+            SetHintText(panelHints[0], "<icon>R</> <icon>S</>", "Checks");
+
+            // Hint 1: show/hide both info panels. One controller button (X) for both;
+            // the keyboard keeps the individual F5/F6 keys.
+            string panelsIcon = keyboard ? "F5/F6" : "X";
+            SetHintText(panelHints[1], panelsIcon, "Goals / Settings");
         }
 
         private void SetHintText(GameObject hintObj, string icon, string label)
