@@ -3,6 +3,7 @@ using OriBFArchipelago.MapTracker.Core;
 using SmartInput;
 using System.Collections.Generic;
 using UnityEngine;
+using CoreInput = Core.Input;
 
 namespace OriBFArchipelago.ArchipelagoUI
 {
@@ -50,6 +51,24 @@ namespace OriBFArchipelago.ArchipelagoUI
             }
         }
 
+        /// <summary>
+        /// A is the panels toggle, but vanilla also reads it in
+        /// <see cref="GameMapTransitionManager.Advance"/> to zoom from the world map into
+        /// the area map. Mark the press used before that runs so it doesn't do both.
+        /// This has to be a patch rather than Update(): Advance is driven from
+        /// GameMapUI.FixedUpdate, which runs before Update within a frame.
+        /// </summary>
+        [HarmonyPatch(typeof(GameMapTransitionManager), nameof(GameMapTransitionManager.Advance))]
+        public static class GameMapTransitionManager_Advance_Patch
+        {
+            [HarmonyPrefix]
+            static void Advance_Prefix()
+            {
+                if (IsOnNormalMap() && new ControllerButtonInput(PanelsToggleButton).GetButton())
+                    CoreInput.ActionButtonA.Used = true;
+            }
+        }
+
         // ---- Legend layout (legend-local units) ------------------------------
         // Entries are packed left-to-right across [zoomX - LeftExtend, RightLimit]
         // with DesiredGap between them, shrinking uniformly if the row would overflow.
@@ -63,10 +82,17 @@ namespace OriBFArchipelago.ArchipelagoUI
         // Static so panel visibility survives the map being closed/reopened.
         private static readonly MapPanel[] Panels = { new GoalProgressPanel(), new ApSettingsPanel() };
 
-        // A single free controller button shows/hides both info panels together.
+        // A single controller button shows/hides both info panels together.
         // (The D-pad isn't exposed as a distinct button, and the bumpers now flip
         // through checks - see MapCheckNavigator.)
-        private const XboxControllerInput.Button PanelsToggleButton = XboxControllerInput.Button.ButtonX;
+        //
+        // Vanilla binds A on the world map to "zoom into the area map"; we swallow that
+        // press below so A only toggles the panels. The right trigger and the mouse
+        // wheel still zoom in.
+        private const XboxControllerInput.Button PanelsToggleButton = XboxControllerInput.Button.ButtonA;
+
+        // Glyph for the button above, from the game's ButtonIconUtility table.
+        private const string PanelsToggleIcon = "<icon>e</>";
 
         private GameMapUI gameMapUI;
         private Transform legendRoot;
@@ -107,10 +133,20 @@ namespace OriBFArchipelago.ArchipelagoUI
         /// non-teleporter) world map, where the legend and panels belong.</summary>
         private bool OnNormalMap()
         {
-            return gameMapUI != null
-                && gameMapUI.IsVisible
-                && !gameMapUI.ShowingObjective
-                && !gameMapUI.ShowingTeleporters;
+            return IsOnNormalMap(gameMapUI);
+        }
+
+        private static bool IsOnNormalMap()
+        {
+            return IsOnNormalMap(GameMapUI.Instance);
+        }
+
+        private static bool IsOnNormalMap(GameMapUI map)
+        {
+            return map != null
+                && map.IsVisible
+                && !map.ShowingObjective
+                && !map.ShowingTeleporters;
         }
 
         private void Update()
@@ -317,9 +353,9 @@ namespace OriBFArchipelago.ArchipelagoUI
             // Hint 0: flip through in-logic checks with the bumpers (controller-only feature).
             SetHintText(panelHints[0], "<icon>R</> <icon>S</>", "Checks");
 
-            // Hint 1: show/hide both info panels. One controller button (X) for both;
+            // Hint 1: show/hide both info panels. One controller button (A) for both;
             // the keyboard keeps the individual F5/F6 keys.
-            string panelsIcon = keyboard ? "F5/F6" : "X";
+            string panelsIcon = keyboard ? "F5/F6" : PanelsToggleIcon;
             SetHintText(panelHints[1], panelsIcon, "Goals / Settings");
         }
 
