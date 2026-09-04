@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using OriBFArchipelago.ArchipelagoUI;
 using OriBFArchipelago.Core;
 using OriBFArchipelago.Helper;
 using OriBFArchipelago.MapTracker.Core;
@@ -84,6 +85,15 @@ namespace OriBFArchipelago.Patches
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F4))
             {
                 OpenTeleportMap();
+            }
+
+            // Legend is the Y button on a controller and L on the keyboard by default.
+            // Vanilla only reads it from AreaMapUI while in area map mode, so it is free here.
+            // Unlike the teleport hints this stays on the screen rather than closing it.
+            if (CoreInput.Legend.OnPressed && !CoreInput.Legend.Used)
+            {
+                CoreInput.Legend.Used = true;
+                ApStatsPages.Cycle();
             }
         }
 

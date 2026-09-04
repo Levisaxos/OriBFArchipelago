@@ -88,6 +88,7 @@ namespace OriBFArchipelago.Core
             {
                 receiver.Update();
                 connection.Update();
+                RunStatsTracker.Update();
             }
 
             // If loading into a level failed to start, re-enable the save slots ui
@@ -327,6 +328,9 @@ namespace OriBFArchipelago.Core
             RandomizerSettings.InGame = true;
             RandomizerSettings.InSaveSelect = false;
 
+            // Statistics are per save slot and start (or resume) with the run
+            RunStatsTracker.Begin(pendingSaveSlot, pendingIsNew);
+
             SlotData updatedData = new SlotData();
             updatedData.slotName = slotName;
             updatedData.serverName = server;
@@ -369,6 +373,7 @@ namespace OriBFArchipelago.Core
             Console.WriteLine($"Quitting save slot {SaveSlotsManager.CurrentSlotIndex}");
             RandomizerSettings.InGame = false;
             receiver.OnSave(true);
+            RunStatsTracker.End();
             connection.Disconnect();
             connection = null;
             receiver = null;

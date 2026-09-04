@@ -26,6 +26,21 @@ Note: this folder only appears after launching the game at least once
 - Default: `LeftAlt+G`, `RightAlt+G`
 - Lists the current goal mode and the progress towards this goal
 
+## Inventory Screen Controls
+
+These are not randomizer keybinds and are not listed in `Keybinds.txt`. They are only active
+while the inventory/pause screen is open, and are shown in that screen's bottom legend.
+
+**Teleport to start** - `F3` / Left Bumper
+
+**Teleport menu** - `F4` / Right Bumper
+
+**Archipelago statistics** - `L` / `Y`
+- Cycles the Statistics block through the vanilla stats, the Archipelago totals, and the
+  per-area breakdown. Acquired skills also get their acquisition time shown on the skill ring.
+- This uses the game's own `Legend` control rather than a randomizer keybind, so it is
+  rebound from the game's control options rather than from `Keybinds.txt`.
+
 ## Adding Valid Key Codes
 
 Each Keybind has a comma-separated list of all possible key combinations that will trigger it.

@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using OriBFArchipelago.ArchipelagoUI;
 using OriBFArchipelago.Core;
 using System;
 using System.Collections.Generic;
@@ -41,6 +42,11 @@ namespace OriBFArchipelago.Patches
         private static bool Prefix()
         {
             RandomizerManager.Connection.SendCompletion();
+            RunStatsTracker.RecordCompletion();
+
+            // Surface the archipelago statistics as soon as the run is over. The inventory
+            // screen is opened straight onto the AP page rather than building a second screen.
+            ApStatsPages.ShowOnCompletion();
             return true;
         }
     }

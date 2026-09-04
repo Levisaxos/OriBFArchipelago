@@ -1,4 +1,6 @@
 ﻿using HarmonyLib;
+using OriBFArchipelago.ArchipelagoUI;
+using OriBFArchipelago.Core;
 using OriBFArchipelago.MapTracker.Core;
 using UnityEngine;
 
@@ -20,11 +22,14 @@ namespace OriBFArchipelago.Patches
         public class InventoryButtonHintDrawer : MonoBehaviour
         {
             private InventoryManager inventoryManager;
+            private Transform legendTransform;
             private GameObject lbButtonHint;
             private GameObject rbButtonHint;
+            private GameObject apStatsHint;
             private bool hintsCreated = false;
             private bool wasVisible = false;
             private bool wasKeyboardUsedLast = false;
+            private StatsPage lastPage = StatsPage.Vanilla;
 
 
             void Awake()
@@ -41,7 +46,7 @@ namespace OriBFArchipelago.Patches
             {
                 ModLogger.Debug("Creating custom button hints");
 
-                Transform legendTransform = inventoryManager.transform.Find("legend");
+                legendTransform = inventoryManager.transform.Find("legend");
                 if (legendTransform == null)
                 {
                     ModLogger.Debug("Legend object not found!");
@@ -87,8 +92,96 @@ namespace OriBFArchipelago.Patches
                 rbButtonHint.transform.localRotation = backButton.localRotation;
                 rbButtonHint.transform.localScale = backButton.localScale;
 
+                // Create the archipelago statistics hint. It sits left of the teleport hint,
+                // but its position is measured rather than fixed - see PositionApStatsHint.
+                apStatsHint = UnityEngine.Object.Instantiate(backButton.gameObject);
+                apStatsHint.transform.SetParent(legendTransform);
+                apStatsHint.name = "ap_stats_custom";
+                apStatsHint.transform.localPosition = lbPos;
+                apStatsHint.transform.localRotation = backButton.localRotation;
+                apStatsHint.transform.localScale = backButton.localScale;
+
                 hintsCreated = true;
                 ModLogger.Debug("Button hints created successfully");
+            }
+
+            /**
+             * Places the statistics hint clear of the teleport hint.
+             *
+             * The other two hints use fixed offsets, which is fine for two entries of known
+             * length but breaks down as soon as a third is added - the label lengths differ
+             * per page and per input scheme. Measuring the rendered width the way
+             * MapPanelController.LayoutLegend does keeps them from overlapping.
+             */
+            private void PositionApStatsHint()
+            {
+                if (apStatsHint == null || lbButtonHint == null || legendTransform == null)
+                    return;
+
+                float legendLossyX = legendTransform.lossyScale.x;
+                float width = MeasureLocalWidth(apStatsHint.transform, legendLossyX, 4f);
+                float gap = MeasureLocalWidth(lbButtonHint.transform, legendLossyX, 4f) * 0.15f;
+
+                Vector3 position = lbButtonHint.transform.localPosition;
+                position.x -= width + gap;
+                apStatsHint.transform.localPosition = position;
+            }
+
+            private static float MeasureLocalWidth(Transform entry, float legendLossyX, float fallback)
+            {
+                if (entry == null || legendLossyX <= 0f)
+                    return fallback;
+
+                Renderer[] renderers = entry.GetComponentsInChildren<Renderer>(true);
+                bool any = false;
+                Bounds bounds = new Bounds();
+                foreach (Renderer r in renderers)
+                {
+                    if (!any)
+                    {
+                        bounds = r.bounds;
+                        any = true;
+                    }
+                    else
+                    {
+                        bounds.Encapsulate(r.bounds);
+                    }
+                }
+
+                if (!any || bounds.size.x <= 0f)
+                    return fallback;
+
+                return bounds.size.x / legendLossyX;
+            }
+
+            private void UpdateApStatsButtonText()
+            {
+                if (apStatsHint == null) return;
+
+                string label;
+                switch (ApStatsPages.Page)
+                {
+                    case StatsPage.ApGlobal: label = "Area statistics"; break;
+                    case StatsPage.ApAreas: label = "Game statistics"; break;
+                    default: label = "Archipelago statistics"; break;
+                }
+
+                SetButtonHintText(apStatsHint, $"{GetLegendButtonIcon()}  {label}");
+                PositionApStatsHint();
+            }
+
+            // Taken from ButtonIconUtility's own icon table, whose fields are private consts.
+            // Worth copying exactly rather than guessing: the letters are not sequential by
+            // button, and <icon>h</> is X rather than Y.
+            private const string IconButtonY = "<icon>i</>";
+            private const string IconKeyboardL = "<icon>P</>";
+
+            /**
+             * Core.Input.Legend is the Y button on a controller and L on the keyboard by default
+             */
+            private string GetLegendButtonIcon()
+            {
+                return PlayerInput.Instance.WasKeyboardUsedLast ? IconKeyboardL : IconButtonY;
             }
 
             private void UpdateLBButtonText()
@@ -172,13 +265,19 @@ namespace OriBFArchipelago.Patches
 
                 bool isVisible = inventoryManager.NavigationManager.IsVisible;
                 bool currentKeyboardState = PlayerInput.Instance.WasKeyboardUsedLast;
+                StatsPage currentPage = ApStatsPages.Page;
 
-                // Update when menu opens OR when input method changes
-                if ((isVisible && !wasVisible) || (isVisible && currentKeyboardState != wasKeyboardUsedLast))
+                // Update when menu opens OR when input method changes OR when the statistics
+                // page is cycled, since the hint names the page it will switch to
+                if ((isVisible && !wasVisible)
+                    || (isVisible && currentKeyboardState != wasKeyboardUsedLast)
+                    || (isVisible && currentPage != lastPage))
                 {
                     UpdateLBButtonText();
                     UpdateRBButtonText();
+                    UpdateApStatsButtonText();
                     wasKeyboardUsedLast = currentKeyboardState;
+                    lastPage = currentPage;
                 }
 
                 wasVisible = isVisible;
@@ -191,6 +290,12 @@ namespace OriBFArchipelago.Patches
                 if (rbButtonHint != null)
                 {
                     rbButtonHint.SetActive(isVisible);
+                }
+
+                if (apStatsHint != null)
+                {
+                    // Only offered in an archipelago run; there are no stats otherwise
+                    apStatsHint.SetActive(isVisible && RunStatsTracker.Current != null);
                 }
             }
         }

@@ -150,6 +150,8 @@ namespace OriBFArchipelago.Patches
         [HarmonyPostfix, HarmonyPatch(nameof(TeleporterController.BeginTeleportation))]
         private static void BeginTeleportationPostfix(GameMapTeleporter selectedTeleporter)
         {
+            RunStatsTracker.RecordTeleport();
+
             if (selectedTeleporter.Area.Area.AreaNameString == "Forlorn Ruins")
             {
                 LocalGameState.TeleportNightberry = true;

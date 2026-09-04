@@ -10,6 +10,7 @@ namespace OriBFArchipelago.Patches
         private static void Postfix(Damage damage)
         {
             RandomizerManager.Receiver.OnDeath();
+            RunStatsTracker.RecordDeath();
 
             // assume damage that is over 100 is meant to be an insta kill
             RandomizerManager.Connection.OnDeath(damage.Amount > 100);
@@ -22,6 +23,7 @@ namespace OriBFArchipelago.Patches
         private static void Postfix(SaveGameController __instance)
         {
             RandomizerManager.Receiver.OnSave();
+            RunStatsTracker.Save();
         }
     }
 }

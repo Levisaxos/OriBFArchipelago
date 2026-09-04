@@ -3,6 +3,7 @@ using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Helpers;
 using Archipelago.MultiClient.Net.MessageLog.Messages;
+using Archipelago.MultiClient.Net.Models;
 using Archipelago.MultiClient.Net.Packets;
 using Game;
 using OriBFArchipelago.MapTracker.Core;
@@ -403,6 +404,49 @@ namespace OriBFArchipelago.Core
         public IEnumerable<string> GetArchipelagoCheckedLocations()
         {
             return session.Locations.AllLocationsChecked.Select(d => session.Locations.GetLocationNameFromId(d));
+        }
+
+        /**
+         * Multiworld item counters for the statistics screen.
+         *
+         * We log in with ItemsHandlingFlags.AllItems, so the server replays every item we have
+         * received - including our own - into session.Items.AllItemsReceived. That makes the
+         * split between "found for myself" and "sent to someone else" a pure local computation:
+         * no location scouting and no extra packets.
+         *
+         * AllLocationsChecked is used rather than the receiver's local dictionary because the
+         * local one double counts progressive mapstones and retains LostOnDeath entries.
+         */
+        public void GetItemCounts(out int checksCollected, out int sentToOthers, out int itemsReceived)
+        {
+            checksCollected = 0;
+            sentToOthers = 0;
+            itemsReceived = 0;
+
+            if (!Connected || session == null)
+                return;
+
+            try
+            {
+                checksCollected = session.Locations.AllLocationsChecked.Count;
+                itemsReceived = session.Items.AllItemsReceived.Count;
+
+                PlayerInfo self = session.Players.ActivePlayer;
+
+                // Distinct because archipelago replays the item history on every reconnect,
+                // and LocationId > 0 filters out starting inventory and server granted items.
+                int selfFound = session.Items.AllItemsReceived
+                    .Where(i => i.LocationId > 0 && self != null && self.IsRelatedTo(i.Player))
+                    .Select(i => i.LocationId)
+                    .Distinct()
+                    .Count();
+
+                sentToOthers = Math.Max(0, checksCollected - selfFound);
+            }
+            catch (Exception e)
+            {
+                ModLogger.Debug($"Could not compute item counts: {e}");
+            }
         }
         /**
          * Check location using MoonGuid

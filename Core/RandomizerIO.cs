@@ -2,6 +2,7 @@
 using OriBFArchipelago.MapTracker.Core;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -177,6 +178,149 @@ namespace OriBFArchipelago.Core
             string locationFullPath = GetFilePath($"Slot{saveSlot}Locations.txt");
             File.WriteAllLines(locationFullPath, [.. locations.Select(d => $"{d.Key}={d.Value}")]);
         }
+
+        /**
+         * Reads the archipelago run statistics for the given slot.
+         * Returns false when there is no stats file yet, which is the normal case for a save
+         * that predates this feature - the caller then starts from an empty RunStats.
+         *
+         * All numbers are written and parsed with the invariant culture so that save files
+         * stay portable between locales that disagree about the decimal separator.
+         */
+        public static bool ReadStats(int saveSlot, out RunStats stats)
+        {
+            string fullPath = GetFilePath($"Slot{saveSlot}Stats.txt");
+
+            stats = new RunStats();
+
+            if (!File.Exists(fullPath))
+                return false;
+
+            try
+            {
+                foreach (string rawLine in File.ReadAllLines(fullPath))
+                {
+                    string line = rawLine.Trim();
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    string[] pair = line.Split(new char[] { '=' }, 2);
+                    if (pair.Length != 2)
+                    {
+                        ModLogger.Debug($"Incorrect format for stats data: {line}");
+                        continue;
+                    }
+
+                    string key = pair[0].Trim();
+                    string value = pair[1].Trim();
+
+                    try
+                    {
+                        if (key.StartsWith("Area."))
+                        {
+                            // Area.<name>=<seconds>,<deaths>
+                            WorldArea area = EnumParser.GetEnumValue<WorldArea>(key.Substring(5));
+                            string[] parts = value.Split(',');
+                            AreaStats areaStats = stats.GetArea(area);
+                            areaStats.Time = ParseFloat(parts[0]);
+                            if (parts.Length > 1)
+                                areaStats.Deaths = int.Parse(parts[1], CultureInfo.InvariantCulture);
+                        }
+                        else if (key.StartsWith("Skill."))
+                        {
+                            // Skill.<name>=<seconds>
+                            InventoryItem skill = EnumParser.GetEnumValue<InventoryItem>(key.Substring(6));
+                            stats.SkillTimeline.Add(new SkillPickup { Skill = skill, Time = ParseFloat(value) });
+                        }
+                        else
+                        {
+                            switch (key)
+                            {
+                                case "Version": stats.Version = int.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "TotalTime": stats.TotalTime = ParseFloat(value); break;
+                                case "TimeLost": stats.TimeLost = ParseFloat(value); break;
+                                case "Deaths": stats.Deaths = int.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "Teleports": stats.Teleports = int.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "Completed": stats.Completed = bool.Parse(value); break;
+                                case "CompletionTime": stats.CompletionTime = ParseFloat(value); break;
+                                default:
+                                    ModLogger.Debug($"Unknown stats key, ignoring: {key}");
+                                    break;
+                            }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // A single unreadable line must not cost the player the whole run's stats
+                        ModLogger.Debug($"Invalid stats data: {key}={value}");
+                    }
+                }
+
+                stats.SkillTimeline.Sort((a, b) => a.Time.CompareTo(b.Time));
+                return true;
+            }
+            catch (IOException e)
+            {
+                ModLogger.Debug($"Could not read stats file: {e}");
+                stats = new RunStats();
+                return false;
+            }
+        }
+
+        /**
+         * Writes the archipelago run statistics for the given slot
+         */
+        public static bool WriteStats(int saveSlot, RunStats stats)
+        {
+            if (stats == null) return false;
+
+            string fullPath = GetFilePath($"Slot{saveSlot}Stats.txt");
+
+            try
+            {
+                if (!Directory.Exists(SAVE_FILE_PATH))
+                {
+                    Directory.CreateDirectory(SAVE_FILE_PATH);
+                }
+
+                StringBuilder sb = new StringBuilder();
+
+                sb.AppendLine($"Version={RunStats.CURRENT_VERSION}");
+                sb.AppendLine($"TotalTime={FormatFloat(stats.TotalTime)}");
+                sb.AppendLine($"TimeLost={FormatFloat(stats.TimeLost)}");
+                sb.AppendLine($"Deaths={stats.Deaths}");
+                sb.AppendLine($"Teleports={stats.Teleports}");
+                sb.AppendLine($"Completed={stats.Completed}");
+                sb.AppendLine($"CompletionTime={FormatFloat(stats.CompletionTime)}");
+
+                foreach (KeyValuePair<WorldArea, AreaStats> pair in stats.Areas)
+                {
+                    sb.AppendLine($"Area.{pair.Key}={FormatFloat(pair.Value.Time)},{pair.Value.Deaths}");
+                }
+
+                foreach (SkillPickup pickup in stats.SkillTimeline)
+                {
+                    sb.AppendLine($"Skill.{pickup.Skill}={FormatFloat(pickup.Time)}");
+                }
+
+                File.WriteAllText(fullPath, sb.ToString());
+                return true;
+            }
+            catch (IOException e)
+            {
+                ModLogger.Debug($"Could not write to stats file: {e}");
+                return false;
+            }
+        }
+
+        private static float ParseFloat(string value)
+        {
+            return float.Parse(value.Trim(), CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatFloat(float value)
+        {
+            return value.ToString("F1", CultureInfo.InvariantCulture);
+        }
         /**
          * Copy files of a saved game into another slot
          */
@@ -185,11 +329,13 @@ namespace OriBFArchipelago.Core
             // Original file paths
             string originalInventoryFullPath = GetFilePath($"Slot{originalSaveSlot}.txt");
             string originalLocationFullPath = GetFilePath($"Slot{originalSaveSlot}Locations.txt");
+            string originalStatsFullPath = GetFilePath($"Slot{originalSaveSlot}Stats.txt");
             var originalMaptrackerSettingsPath = Paths.ConfigPath + $"/MapTracker/Slot{originalSaveSlot}.cfg";
 
             // New file paths
             string newInventoryFullPath = GetFilePath($"Slot{copySaveSlot}.txt");
             string newLocationFullPath = GetFilePath($"Slot{copySaveSlot}Locations.txt");
+            string newStatsFullPath = GetFilePath($"Slot{copySaveSlot}Stats.txt");
             var newMaptrackerSettingsPath = Paths.ConfigPath + $"/MapTracker/Slot{copySaveSlot}.cfg";
 
 
@@ -199,6 +345,8 @@ namespace OriBFArchipelago.Core
                     File.Copy(originalInventoryFullPath, newInventoryFullPath, true);
                 if (File.Exists(originalLocationFullPath))
                     File.Copy(originalLocationFullPath, newLocationFullPath, true);
+                if (File.Exists(originalStatsFullPath))
+                    File.Copy(originalStatsFullPath, newStatsFullPath, true);
                 if (File.Exists(originalMaptrackerSettingsPath))
                     File.Copy(originalMaptrackerSettingsPath, newMaptrackerSettingsPath,true);
             }
@@ -217,11 +365,13 @@ namespace OriBFArchipelago.Core
         {
             string inventoryFullPath = GetFilePath($"Slot{saveSlot}.txt");
             string locationFullPath = GetFilePath($"Slot{saveSlot}Locations.txt");
+            string statsFullPath = GetFilePath($"Slot{saveSlot}Stats.txt");
 
             try
             {
                 File.Delete(inventoryFullPath);
                 File.Delete(locationFullPath);
+                File.Delete(statsFullPath);
                 return true;
             }
             catch (Exception e)

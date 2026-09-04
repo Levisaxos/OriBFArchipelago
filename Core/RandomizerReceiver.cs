@@ -388,6 +388,7 @@ namespace OriBFArchipelago.Core
         {
             var skill = (AbilityType)Enum.Parse(typeof(AbilityType), skillName.ToString());
             Characters.Sein.PlayerAbilities.SetAbility(skill, true);
+            RunStatsTracker.RecordSkill(skillName);
         }
 
         private void ReceiveEnergyCell()
